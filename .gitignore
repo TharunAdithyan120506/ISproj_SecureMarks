@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+secrets/
+client_keys/
+data/
+captures/
+analysis/out/
+bench/out/
+demo_backup/
+.pytest_cache/

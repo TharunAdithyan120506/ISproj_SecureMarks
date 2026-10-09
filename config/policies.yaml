@@ -1,0 +1,30 @@
+# SecureMarks security policies. Loaded and validated at server start-up
+# (middleware/policy/engine.py); an unknown cipher or a missing field stops the server.
+confidential:
+  cipher: AES-256-GCM
+  key_exchange: X25519
+  kdf: HKDF-SHA256
+  key_len: 32
+  signature: Ed25519        # required on publish
+  max_payload_kb: 512
+  rate_limit: {capacity: 10, refill_per_sec: 2}
+  replay_window_s: 30
+  audit: full
+normal:
+  cipher: AES-128-GCM
+  key_exchange: X25519
+  kdf: HKDF-SHA256
+  key_len: 16
+  signature: none
+  max_payload_kb: 5120
+  rate_limit: {capacity: 30, refill_per_sec: 10}
+  replay_window_s: 60
+  audit: decisions
+legacy-rsa:                 # P1, for comparison only
+  cipher: AES-256-GCM
+  key_exchange: RSA-OAEP-2048
+  signature: RSA-PSS-2048
+  max_payload_kb: 512
+  rate_limit: {capacity: 10, refill_per_sec: 2}
+  replay_window_s: 30
+  audit: full

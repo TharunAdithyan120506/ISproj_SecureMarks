@@ -1,0 +1,6 @@
+# Seed accounts. Passwords are demo-only (also listed in README.md).
+t104:  {password: "teach@104", role: teacher, courses: [IT301]}
+s608:  {password: "stud@608",  role: student, roll_no: "240911608"}
+s612:  {password: "stud@612",  role: student, roll_no: "240911612"}
+ctrl:  {password: "ctrl@exam", role: ctrl}
+admin: {password: "admin@sm",  role: admin}

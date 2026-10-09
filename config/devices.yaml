@@ -1,0 +1,12 @@
+# Simulated devices: every client binds its own loopback address so a capture
+# shows separate hosts. The analyser falls back to the X-Device header if the
+# loopback IPs collapse to 127.0.0.1.
+server:
+  ip: 127.0.0.1
+  label: server
+roles:
+  teacher:  {ip: 127.0.0.2,  label: teacher-laptop}
+  student:  {ip: 127.0.0.3,  label: student-laptop}
+  ctrl:     {ip: 127.0.0.4,  label: ctrl-pc}
+  admin:    {ip: 127.0.0.5,  label: admin-pc}
+  attacker: {ip: 127.0.0.66, label: attacker}

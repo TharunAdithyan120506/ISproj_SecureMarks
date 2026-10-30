@@ -97,7 +97,9 @@ def create_app(settings: Settings | None = None, check_setup: bool = True) -> Fa
 
 
 def _banner(settings: Settings, state: AppState) -> None:
-    c = Console(highlight=False)
+    import sys
+    c = Console(highlight=False, legacy_windows=False,
+                file=open(sys.stdout.fileno(), mode="w", encoding="utf-8", closefd=False))
     c.rule("[bold cyan]SecureMarks middleware")
     c.print(f"DEMO_MODE={'1' if settings.demo_mode else '0'}   DB={settings.db_path}")
     for name, p in state.policies.policies.items():

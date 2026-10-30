@@ -8,6 +8,7 @@ STATUS = {
     "bad_request": 400,
     "integrity_failed": 400,
     "bad_signature": 400,
+    "attachment_mismatch": 400,
     "auth_failed": 401,
     "session_invalid": 401,
     "forbidden": 403,

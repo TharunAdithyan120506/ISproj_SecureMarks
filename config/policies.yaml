@@ -6,7 +6,7 @@ confidential:
   kdf: HKDF-SHA256
   key_len: 32
   signature: Ed25519        # required on publish
-  max_payload_kb: 512
+  max_payload_kb: 1024      # room for an answer-sheet image (<= 600 KB) inside the envelope
   rate_limit: {capacity: 10, refill_per_sec: 2}
   replay_window_s: 30
   audit: full

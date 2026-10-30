@@ -5,6 +5,9 @@ import json
 from datetime import datetime, timezone
 
 RECORD_FIELDS = ("course", "roll_no", "midsem", "endsem", "total", "teacher", "published_at")
+# Present only when an answer-sheet image is attached: the SHA-256 of the image
+# bytes, so the teacher's signature covers the image as well as the marks.
+OPTIONAL_FIELDS = ("attachment_sha256",)
 MIDSEM_MAX = 50
 ENDSEM_MAX = 100
 
@@ -22,7 +25,7 @@ def now_iso() -> str:
 
 
 def build_record(course: str, roll_no: str, midsem: int, endsem: int, teacher: str,
-                 published_at: str | None = None) -> dict:
+                 published_at: str | None = None, attachment_sha256: str | None = None) -> dict:
     record = {
         "course": course,
         "roll_no": str(roll_no),
@@ -32,13 +35,19 @@ def build_record(course: str, roll_no: str, midsem: int, endsem: int, teacher: s
         "teacher": teacher,
         "published_at": published_at or now_iso(),
     }
+    if attachment_sha256:
+        record["attachment_sha256"] = attachment_sha256
     validate_record(record)
     return record
 
 
 def validate_record(record: dict) -> None:
-    if not isinstance(record, dict) or set(record) != set(RECORD_FIELDS):
-        raise RecordError(f"record must have exactly the fields {', '.join(RECORD_FIELDS)}")
+    if not isinstance(record, dict) or set(RECORD_FIELDS) - set(record) or set(record) - set(RECORD_FIELDS + OPTIONAL_FIELDS):
+        raise RecordError(f"record must have exactly the fields {', '.join(RECORD_FIELDS)} "
+                          f"(optionally {', '.join(OPTIONAL_FIELDS)})")
+    att = record.get("attachment_sha256")
+    if att is not None and (not isinstance(att, str) or len(att) != 64 or any(c not in "0123456789abcdef" for c in att)):
+        raise RecordError("attachment_sha256 must be 64 lowercase hex characters")
     if not isinstance(record["course"], str) or not record["course"]:
         raise RecordError("course must be a non-empty string")
     if not isinstance(record["roll_no"], str) or not record["roll_no"].isdigit():

@@ -11,6 +11,8 @@ CATALOG = [
      "python -m attacks.tamper_db"),
     ("tamper_db_swap", "Swap another student's ciphertext into the row", "Integrity", "500 record_integrity_failed",
      "python -m attacks.tamper_db --swap"),
+    ("tamper_sheet", "Malicious admin replaces the answer-sheet image", "Integrity, authenticity",
+     "200 sheet_invalid", "python -m attacks.tamper_db --sheet"),
     ("replay", "Replay the captured publish at once", "Replay resistance", "409 replay_detected",
      "python -m attacks.replay --last"),
     ("replay_late", "Replay the captured publish after 35 s", "Replay resistance", "409 stale_request",

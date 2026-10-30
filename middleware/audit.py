@@ -26,6 +26,7 @@ ACTIONS = {
     "/api/marks/publish": "marks_publish",
     "/api/marks/view": "marks_view",
     "/api/marks/verify": "marks_verify",
+    "/api/marks/attachment": "attachment_view",
     "/api/audit/list": "audit_list",
     "/api/admin/keys/list": "keys_list",
     "/api/admin/keys/rotate": "keys_rotate",

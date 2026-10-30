@@ -1,6 +1,6 @@
-"""The five capture experiments of PRD section 9, scripted end to end.
+"""The capture experiments of PRD section 9 (plus exp6, the encrypted image), scripted end to end.
 
-    python -m analysis.experiments exp1          # or exp2, exp2_tls, exp3, exp4, exp5, all
+    python -m analysis.experiments exp1          # or exp2, exp2_tls, exp3, exp4, exp5, exp6, all
     python -m analysis.experiments exp3 --no-analyse
 
 Each run: start the capture -> drive the traffic through the SDK and the attack
@@ -120,6 +120,29 @@ def exp5(log) -> None:
     log(f"attacker 127.0.0.66 IDOR: {idor.run().actual}")
 
 
+def exp6(log) -> None:
+    """Answer-sheet image: published by the teacher and fetched by the student, both inside the
+    AES-GCM envelope. The capture shows an image-sized body at ~8 bits/byte and no PNG header."""
+    import io
+
+    from cryptolab import samples
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.fromarray(samples.photo(320)).save(buf, format="JPEG", quality=85)
+    sheet = buf.getvalue()
+    t = device_client("teacher", "t104")
+    pub = t.publish_marks(teacher_key(), "IT301", ROLL, 27, 45, attachment=sheet, attachment_mime="image/jpeg")
+    log(f"teacher-laptop publish with a {len(sheet):,} B answer sheet: {pub.summary()}")
+    pause()
+    s = device_client("student", "s608")
+    view = s.view_marks()
+    rec = next((r for r in (view.payload or {}).get("records", []) if r["record"]["course"] == "IT301"), None)
+    log(f"student-laptop view: {view.summary()}")
+    pause()
+    got = s.fetch_attachment("IT301", record=rec["record"] if rec else None)
+    log(f"student-laptop answer sheet: {got.summary()} · hash verified {bool(got.ok and got.payload.get('verified'))}")
+
+
 EXPERIMENTS = {
     "exp1": ("exp1_plain_vs_protected", "Plain vs protected", exp1, False),
     "exp2": ("exp2_http", "HTTP: password, JWT and headers visible", lambda log: exp2(log, False), False),
@@ -127,6 +150,7 @@ EXPERIMENTS = {
     "exp3": ("exp3_replay", "Replay at once and after 35 s", exp3, True),
     "exp4": ("exp4_flood", "Result-day flood with a latency probe", exp4, True),
     "exp5": ("exp5_devices", "Five devices, one of each role", exp5, False),
+    "exp6": ("exp6_image", "Encrypted answer-sheet image on the wire", exp6, False),
 }
 
 
@@ -187,7 +211,7 @@ def main() -> None:
     ap.add_argument("--no-analyse", action="store_true")
     ap.add_argument("--mode", choices=["auto", "dumpcap", "tap"], default="auto")
     a = ap.parse_args()
-    keys = ["exp1", "exp2", "exp3", "exp4", "exp5"] if a.experiment == "all" else [a.experiment]
+    keys = ["exp1", "exp2", "exp3", "exp4", "exp5", "exp6"] if a.experiment == "all" else [a.experiment]
     for k in keys:
         try:
             run(k, not a.no_capture, not a.no_analyse, a.mode, log=lambda m: print(m, flush=True))

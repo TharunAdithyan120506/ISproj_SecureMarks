@@ -64,19 +64,7 @@ def record(group: str, name: str, metric: str, value: float, unit: str, size: in
                  "size_bytes": size or "", "runs": runs, "note": note})
 
 
-def median_ms(fn, runs: int, warmup: int = 2) -> float:
-    for _ in range(warmup):
-        fn()
-    times = []
-    for _ in range(runs):
-        t0 = time.perf_counter()
-        fn()
-        times.append((time.perf_counter() - t0) * 1000)
-    return statistics.median(times)
-
-
-def runs_for(size: int) -> int:
-    return 200 if size <= 10 * KB else 50 if size <= 100 * KB else 10 if size <= MB else 5 if size <= 10 * MB else 3
+from cryptolab.perf import median_ms, runs_for  # noqa: E402  (shared with the crypto labs)
 
 
 # --- groups ------------------------------------------------------------------------------------

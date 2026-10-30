@@ -1,4 +1,4 @@
-"""Start the demo: middleware, (tap), portal - each in its own console window.
+"""Start the demo: middleware, (tap), portal API + React portal - each in its own console window.
 
     python scripts\\run_demo.py            # auto: tap mode if Wireshark/dumpcap is missing
     python scripts\\run_demo.py --tap      # force the recording relay (server on 8001, tap on 8000)
@@ -50,12 +50,28 @@ def wait_http(url: str, seconds: float = 20) -> bool:
     return False
 
 
+def build_portal(force: bool = False) -> None:
+    """Build the React portal (web/dist) once; needs Node.js 18+."""
+    web = ROOT / "web"
+    if (web / "dist" / "index.html").exists() and not force:
+        return
+    npm = shutil.which("npm") or shutil.which("npm.cmd")
+    if not npm:
+        print("  warning: Node.js/npm not found - install Node.js 18+ to build the portal (web/)")
+        return
+    print("  building the portal (npm ci && npm run build)…")
+    if not (web / "node_modules").exists():
+        subprocess.run([npm, "ci", "--no-audit", "--no-fund"], cwd=web, check=True, shell=os.name == "nt")
+    subprocess.run([npm, "run", "build"], cwd=web, check=True, shell=os.name == "nt")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tap", action="store_true", help="force tap mode (no Npcap needed)")
     ap.add_argument("--tls", action="store_true", help="also run the HTTPS server on 8443 (P1)")
     ap.add_argument("--reset", action="store_true", help="run setup_demo.py --reset first")
     ap.add_argument("--no-portal", action="store_true")
+    ap.add_argument("--rebuild", action="store_true", help="rebuild the React portal even if web/dist exists")
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
 
@@ -75,10 +91,12 @@ def main() -> None:
     ok = wait_http("http://127.0.0.1:8000/health")
     print(f"  middleware {'up' if ok else 'NOT reachable'} at http://127.0.0.1:8000")
     if not a.no_portal:
-        launch("SecureMarks portal", [PY, "-m", "streamlit", "run", "portal/Home.py"])
-        if wait_http("http://localhost:8501", 40) and not a.no_browser:
+        build_portal(force=a.rebuild)
+        launch("SecureMarks portal", [PY, "-m", "uvicorn", "portal_api.main:app", "--host", "127.0.0.1", "--port", "8501",
+                                      "--workers", "1", "--no-access-log"])
+        if wait_http("http://127.0.0.1:8501/api/health", 40) and not a.no_browser:
             webbrowser.open("http://localhost:8501")
-        print("  portal at http://localhost:8501 (open a second window for the student)")
+        print("  portal at http://localhost:8501 (open a second tab for the student)")
     if not shutil.which("tshark") and not Path(r"C:\Program Files\Wireshark\tshark.exe").exists():
         print("  note: tshark not found - the analyser uses its built-in pcapng reader instead of PyShark")
 

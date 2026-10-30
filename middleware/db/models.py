@@ -1,4 +1,4 @@
-"""SQLAlchemy models: the six tables of PRD section 7.
+"""SQLAlchemy models: the six tables of PRD section 7, plus answer-sheet attachments.
 
 Sessions, seen request IDs and token buckets are deliberately *not* here: they
 live in memory because the demo runs a single Uvicorn worker.
@@ -75,6 +75,25 @@ class Mark(Base):
     key_fingerprint: Mapped[str] = mapped_column(String(16), nullable=False)
     published_at: Mapped[str] = mapped_column(String(32), nullable=False)
     request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sign_ms: Mapped[float | None] = mapped_column(Float)    # measured on the teacher's device
+    verify_ms: Mapped[float | None] = mapped_column(Float)  # measured by the server at publish
+
+
+class Attachment(Base):
+    """Answer-sheet image of one marks version: AES-256-GCM under the DEK,
+    AAD = sheet|course|roll|version. Its SHA-256 is inside the signed record."""
+    __tablename__ = "attachments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mark_id: Mapped[int] = mapped_column(ForeignKey("marks.id"), unique=True, nullable=False)
+    mime: Mapped[str] = mapped_column(String(32), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    dek_id: Mapped[int] = mapped_column(ForeignKey("data_keys.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class AuditLog(Base):

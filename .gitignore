@@ -8,5 +8,16 @@ data/
 captures/
 analysis/out/
 bench/out/
+cryptolab/out/
 demo_backup/
 .pytest_cache/
+
+# React portal
+web/node_modules/
+web/dist/
+
+# Private: implementation guide, viva bank, course material, local tooling
+private/
+IS Lab Manual .pdf
+*.pdf.bak
+.claude/

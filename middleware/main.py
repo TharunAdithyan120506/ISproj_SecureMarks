@@ -47,6 +47,9 @@ def _check_setup(settings: Settings, state: AppState) -> None:
         problems.append(f"master key missing ({settings.master_key_path})")
     if not settings.db_path.exists() or not inspect(state.db.engine).has_table("users"):
         problems.append(f"database not initialised ({settings.db_path})")
+    elif not inspect(state.db.engine).has_table("attachments") or "sign_ms" not in {
+            c["name"] for c in inspect(state.db.engine).get_columns("marks")}:
+        problems.append("database schema is from an older version (no answer-sheet support)")
     if problems:
         raise RuntimeError("SecureMarks is not set up: " + "; ".join(problems)
                            + ". Run:  python scripts\\setup_demo.py --reset")

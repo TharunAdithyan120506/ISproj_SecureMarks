@@ -284,6 +284,14 @@ class SecureClient:
                             trace_id=resp.headers.get("x-trace-id"), path=path)
         result.extra.update(request_bytes=len(ct), response_bytes=len(resp.content),
                             related_traces=[handshake.trace_id] if handshake and handshake.trace_id else [])
+        # Exactly what crossed the network (bearer token left out), for the "on the wire" views.
+        result.extra["wire"] = {
+            "cipher": aead.cipher_name(sess.key), "policy": policy, "session_id": sess.session_id,
+            "request": {"method": "POST", "path": path, "headers": {k: v for k, v in headers.items() if k != "Authorization"},
+                        "nonce": nonce, "aad": aad, "body": ct},
+            "response": {"status": resp.status_code, "nonce": resp.headers.get("x-nonce"),
+                         "content_type": resp.headers.get("content-type"), "body": resp.content},
+        }
         if resp.status_code == 200:
             try:
                 plain = aead.decrypt(sess.key, b64d(resp.headers["x-nonce"]), resp.content, response_aad(rid))
@@ -312,8 +320,16 @@ class SecureClient:
     # --- marks ------------------------------------------------------------------------------------------
 
     def publish_marks(self, signing_key, course: str, roll_no: str, midsem: int, endsem: int, *,
-                      policy: str | None = None, mutate_body=None, record: dict | None = None) -> CallResult:
+                      policy: str | None = None, mutate_body=None, record: dict | None = None,
+                      attachment: bytes | None = None, attachment_mime: str = "image/png") -> CallResult:
+        """Sign and publish. An `attachment` (answer-sheet image) is hashed into the signed record
+        and travels inside the same AES-GCM envelope."""
         trace: list[dict] = []
+        if attachment is not None:
+            att_hash = sha256_hex(attachment)
+            _step(trace, "sha256_attachment", f"answer sheet {attachment_mime} {len(attachment):,} B → {att_hash}")
+            if record is None:
+                record = build_record(course, roll_no, midsem, endsem, teacher=self.username, attachment_sha256=att_hash)
         record = record or build_record(course, roll_no, midsem, endsem, teacher=self.username)
         _step(trace, "build_record", f"{record['course']} · roll {record['roll_no']} · {len(record)} fields · "
                                      f"published_at {record['published_at']}")
@@ -321,12 +337,34 @@ class SecureClient:
         _step(trace, "canonicalize", f"sorted-key compact JSON, {len(canon)} B")
         digest = sha256(canon)
         _step(trace, "sha256", digest.hex())
+        t0 = time.perf_counter()
         alg, signature = sign.sign(signing_key, digest)
+        sign_ms = (time.perf_counter() - t0) * 1000
         _step(trace, "ed25519_sign" if alg == sign.ED25519 else "rsa_pss_sign",
-              f"{alg} signature {len(signature)} B: {signature.hex()[:32]}…")
+              f"{alg} signature {len(signature)} B in {sign_ms:.3f} ms: {signature.hex()[:32]}…")
         policy = policy or ("legacy-rsa" if alg == sign.RSA_PSS else "confidential")
-        payload = {"record": record, "signature_b64": b64e(signature), "sig_alg": alg}
-        return self.call("/api/marks/publish", payload, policy=policy, mutate_body=mutate_body, pre_trace=trace)
+        payload = {"record": record, "signature_b64": b64e(signature), "sig_alg": alg, "sign_ms": round(sign_ms, 4)}
+        if attachment is not None:
+            payload.update(attachment_b64=b64e(attachment), attachment_mime=attachment_mime)
+        res = self.call("/api/marks/publish", payload, policy=policy, mutate_body=mutate_body, pre_trace=trace)
+        res.extra.update(sign_ms=round(sign_ms, 4), signature_hex=signature.hex(), record=record)
+        return res
+
+    def fetch_attachment(self, course: str, roll_no: str | None = None, *, record: dict | None = None) -> CallResult:
+        """Download the answer sheet and check its SHA-256 against the teacher-signed record."""
+        roll_no = roll_no or self.roll_no
+        res = self.call("/api/marks/attachment", {"roll_no": roll_no, "course": course})
+        if not res.ok:
+            return res
+        data = b64d(res.payload["image_b64"])
+        got = sha256_hex(data)
+        want = (record or {}).get("attachment_sha256", res.payload["sha256"])
+        ok = got == want
+        _step(res.trace, "sha256_attachment", f"{len(data):,} B → {got[:16]}… "
+                                              f"{'matches' if ok else 'DIFFERS FROM'} the signed {want[:16]}…", ok=ok)
+        res.payload["verified"] = ok and record is not None
+        res.payload["computed_sha256"] = got
+        return res
 
     def signing_key_info(self, username: str, fingerprint: str | None = None) -> dict | None:
         cache_key = (username, fingerprint)

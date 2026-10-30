@@ -34,6 +34,19 @@ def raw_from_last() -> tuple[bytes, dict]:
     return raw_path.read_bytes(), meta
 
 
+FRESH_S = 25  # an immediate replay needs a capture younger than the 30 s freshness window
+
+
+def capture_fresh_publish() -> None:
+    """Have t104 publish once (its SDK saves the raw request), so the replay starts from a fresh capture."""
+    from .common import device_client, teacher_key
+    t = device_client("teacher", "t104")
+    t.save_last_request = load_settings().demo_mode
+    res = t.publish_marks(teacher_key(), "IT301", "240911608", 27, 45)
+    if not res.ok:
+        raise RuntimeError(f"could not capture a fresh publish to replay: {res.summary()}")
+
+
 def raw_from_pcap(pcap: str, path: str = "/api/marks/publish", engine: str = "auto") -> tuple[bytes, dict]:
     from analysis.httpparse import build_messages, pair_messages
     from analysis.packets import HTTP_PORTS, read_capture
@@ -77,6 +90,16 @@ def send_raw(raw: bytes, base_url: str | None = None, source_ip: str | None = No
 
 def run(source: str = "last", pcap: str | None = None, path: str = "/api/marks/publish", delay: float = 0,
         on_wait=None) -> AttackResult:
+    fresh_note = None
+    if source == "last" and delay <= 30:
+        try:
+            _raw, old = raw_from_last()
+            age = time.time() - old.get("saved_at", 0)
+        except RuntimeError:
+            age = float("inf")
+        if age > FRESH_S:
+            capture_fresh_publish()
+            fresh_note = "the saved publish was too old to replay at once, so t104 published again first"
     raw, meta = raw_from_pcap(pcap, path) if source == "pcap" else raw_from_last()
     expected = "409 stale_request" if delay > 30 else "409 replay_detected"
     if delay:
@@ -97,6 +120,8 @@ def run(source: str = "last", pcap: str | None = None, path: str = "/api/marks/p
     result.notes.append(f"resent {len(raw)} raw bytes of POST {meta.get('path', path)} from 127.0.0.66"
                         + (f" (originally sent {age} s ago)" if age is not None else ""))
     result.notes.append(f"original request ID {meta.get('request_id')}; replay answered in {ms:.1f} ms")
+    if fresh_note:
+        result.notes.append(fresh_note)
     return with_evidence(result)
 
 

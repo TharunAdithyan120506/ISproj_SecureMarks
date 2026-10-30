@@ -35,6 +35,9 @@ class PortalSession:
         if not self.user or self.client is None:
             return None
         c = self.client
+        if c.token_expires_at <= time.time():  # 15-minute JWT ran out: sign this tab out cleanly
+            self.logout()
+            return None
         sess = c.sessions.get("confidential") or c.sessions.get("normal")
         return {**self.user, "label": ROLE_LABEL[self.user["role"]],
                 "token_expires_in": max(0, int(c.token_expires_at - time.time())),
@@ -57,6 +60,15 @@ def get_session(x_portal_session: str | None = Header(default=None)) -> PortalSe
             s = _sessions[sid] = PortalSession(sid)
         s.touched = time.time()
         return s
+
+
+def end_session(sid: str) -> None:
+    """Sign out: close the device client, forget its keys and drop the whole portal session."""
+    with _lock:
+        s = _sessions.pop(sid, None)
+    if s is not None:
+        with s.lock:
+            s.logout()
 
 
 def _expire() -> None:

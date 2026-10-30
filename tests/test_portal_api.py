@@ -28,6 +28,16 @@ def test_session_header_required(c):
     assert c.get("/api/me", headers=H).json() == {"user": None}
 
 
+def test_logout_drops_the_whole_session(c):
+    from portal_api import sessions
+    h = {"X-Portal-Session": "pytest-logout"}
+    c.get("/api/me", headers=h)
+    assert "pytest-logout" in sessions._sessions
+    assert c.post("/api/logout", headers=h).json() == {"ok": True, "user": None}
+    assert "pytest-logout" not in sessions._sessions
+    assert c.get("/api/dashboard", headers=h).status_code == 401
+
+
 def test_role_pages_need_sign_in(c):
     r = c.post("/api/publish", headers=H, data={"course": "IT301", "roll_no": "240911608", "midsem": "1", "endsem": "1"})
     assert r.status_code == 401

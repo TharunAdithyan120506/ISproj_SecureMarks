@@ -36,8 +36,15 @@ def _env() -> dict:
 
 
 def run_module(*args: str, timeout: float = 600) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-m", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", env=_env(), timeout=timeout)
+    """Run `python -m ...`; a timeout or launch failure comes back as a failed result, never a 500."""
+    cmd = [sys.executable, "-m", *args]
+    try:
+        return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", env=_env(), timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 1, "", f"python -m {' '.join(args)} timed out after {timeout:.0f} s")
+    except OSError as exc:
+        return subprocess.CompletedProcess(cmd, 1, "", f"could not start python -m {args[0]}: {exc}")
 
 
 def stream_module(*args: str) -> StreamingResponse:
@@ -120,7 +127,10 @@ def trace(request_id: str):
 
 @router.get("/capture")
 def capture_status():
-    caps = [c for c in capture.list_captures() if c["path"].endswith((".pcapng", ".pcap"))]
+    try:
+        caps = [c for c in capture.list_captures() if c["path"].endswith((".pcapng", ".pcap"))]
+    except OSError:
+        caps = []
     for c in caps:
         c["analysed"] = (OUT_DIRS["analysis"] / Path(c["path"]).stem / "summary.json").exists()
     return {"modes": capture.available_modes(), "current": capture.status(), "captures": caps,

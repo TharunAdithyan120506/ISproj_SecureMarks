@@ -5,6 +5,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer,
   Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
+import { THEME_EVENT } from "./theme";
 
 const TOKENS = ["c1", "c2", "c3", "c4", "c5", "c6", "grid", "label", "label-2", "pass", "fail", "accent", "ch-r", "ch-g", "ch-b", "card"] as const;
 type Colors = Record<(typeof TOKENS)[number], string>;
@@ -20,7 +21,11 @@ export function useColors(): Colors {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const on = () => setC(read());
     mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
+    window.addEventListener(THEME_EVENT, on);
+    return () => {
+      mq.removeEventListener("change", on);
+      window.removeEventListener(THEME_EVENT, on);
+    };
   }, []);
   return c;
 }

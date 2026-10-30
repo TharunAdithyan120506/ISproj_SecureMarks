@@ -91,9 +91,17 @@ export default function Traffic() {
   );
 }
 
+/** Analyser summaries store devices as {name: request count}; older ones as a list. */
+function deviceList(d: unknown): string {
+  if (Array.isArray(d)) return d.join(", ");
+  if (d && typeof d === "object") return Object.entries(d as Record<string, number>).map(([k, v]) => `${k} (${v})`).join(", ");
+  return "–";
+}
+
 function Results({ r }: { r: any }) {
-  const s = r.summary;
+  const s = r.summary || {};
   const e = s.entropy_mean || {};
+  const tables = r.tables || {};
   return (
     <div className="stack fade-in">
       <div className="grid g4">
@@ -102,9 +110,9 @@ function Results({ r }: { r: any }) {
         <Metric label="Entropy, plain ≥ 1 KB" value={fmt(e.plain_ge_1KB, 3)} unit="bits/B" foot="readable JSON" />
         <Metric label="Entropy, protected ≥ 1 KB" value={fmt(e.protected_ge_1KB, 3)} unit="bits/B" foot="AES-GCM ciphertext" />
       </div>
-      <div className="row muted small">Devices: {(s.devices || []).join(", ")} · flags {JSON.stringify(s.flags)} · {s.flags_matched_in_audit} matched in the audit log, {s.flags_without_audit} without</div>
+      <div className="row muted small">Devices: {deviceList(s.devices)} · flags {Object.keys(s.flags || {}).length ? Object.entries(s.flags).map(([k, v]) => `${k} ×${v}`).join(", ") : "none"} · {s.flags_matched_in_audit ?? 0} matched in the audit log, {s.flags_without_audit ?? 0} without</div>
       <div className="grid g2">
-        {r.figures.map((f: string) => (
+        {(r.figures || []).map((f: string) => (
           <Card key={f} className="tight"><img src={fileUrl(f)} alt={f.split("/").pop()} style={{ width: "100%", borderRadius: 10, display: "block" }} /></Card>
         ))}
       </div>
@@ -112,7 +120,7 @@ function Results({ r }: { r: any }) {
         value: t, label: t === "audit_join" ? "SQL join" : `${t}.csv`,
         content: (
           <Card className="flush">
-            <DataTable rows={r.tables[t]} max={420} />
+            <DataTable rows={tables[t] || []} max={420} />
             {t === "audit_join" && <pre className="json" style={{ margin: 12 }}>{`ATTACH 'data/securemarks.db' AS app;
 SELECT m.ts, m.device, m.request_id, m.status, a.action, a.outcome, a.code
 FROM http_messages m

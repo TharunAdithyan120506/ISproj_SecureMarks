@@ -15,7 +15,7 @@ from middleware.crypto.hashing import sha256_hex
 from sdk.client import SecureClient, load_accounts
 
 from .present import call_json, wire_json
-from .sessions import ROLE_LABEL, PortalSession, get_session, login, require
+from .sessions import ROLE_LABEL, PortalSession, end_session, get_session, login, require
 
 router = APIRouter(prefix="/api")
 
@@ -50,9 +50,8 @@ def do_login(body: LoginBody, s: PortalSession = Depends(get_session)):
 
 @router.post("/logout")
 def do_logout(s: PortalSession = Depends(get_session)):
-    with s.lock:
-        s.logout()
-    return {"ok": True}
+    end_session(s.sid)
+    return {"ok": True, "user": None}
 
 
 @router.get("/me")
@@ -72,6 +71,55 @@ def health():
         finally:
             c.close()
     return {"middleware": _health_cache["v"], "portal": True}
+
+
+# --- role dashboard (Home) ----------------------------------------------------------------------------
+
+@router.get("/dashboard")
+def dashboard(s: PortalSession = Depends(get_session)):
+    """What this viewer should see on Home, by role. Each part fails soft so Home always renders."""
+    c = require(s)
+    role = s.user["role"]
+    out: dict = {"role": role, "me": s.me()}
+    with s.lock:
+        try:
+            if role == "teacher":
+                r = c.plain_call("GET", f"/api/keys/signing/{c.username}?alg=Ed25519")
+                key = r.payload if r.ok else {}
+                out["signing_key"] = {k: key.get(k) for k in ("alg", "fingerprint", "status", "created_at", "revoked_at")}
+                last = s.last.get("publish")
+                if last is not None:
+                    rec = last.extra.get("record") or {}
+                    out["last_publish"] = {"ok": last.ok, "code": last.code, "course": rec.get("course"),
+                                           "roll_no": rec.get("roll_no"), "total": rec.get("total"),
+                                           "with_sheet": "attachment_sha256" in rec, "sign_ms": last.extra.get("sign_ms"),
+                                           "record_id": (last.payload or {}).get("record_id")}
+            elif role == "student":
+                res = c.view_marks()
+                out["marks_ok"], out["marks_error"] = res.ok, None if res.ok else res.summary()
+                out["marks"] = [{"course": r["record"]["course"], "midsem": r["record"]["midsem"],
+                                 "endsem": r["record"]["endsem"], "total": r["record"]["total"],
+                                 "verified": r.get("verified"), "signer": r["signer"], "version": r["version"],
+                                 "published_at": r["record"]["published_at"], "sheet": bool(r.get("attachment"))}
+                                for r in (res.payload or {}).get("records", [])]
+            elif role in ("ctrl", "admin"):
+                res = c.audit_list(limit=300)
+                if res.ok:
+                    entries = res.payload["entries"]
+                    counts: dict[str, int] = {}
+                    for e in entries:
+                        counts[e["outcome"]] = counts.get(e["outcome"], 0) + 1
+                    out["audit"] = {"chain_ok": res.payload["chain_ok"], "broken_at": res.payload.get("chain_broken_at"),
+                                    "counts": counts, "recent_refusals": [
+                                        {k: e[k] for k in ("id", "ts", "device", "actor", "action", "code")}
+                                        for e in entries if e["outcome"] != "allowed"][:6]}
+                if role == "admin":
+                    keys = c.keys_list()
+                    if keys.ok:
+                        out["keys"] = {"data_keys": keys.payload["data_keys"], "signing_keys": keys.payload["signing_keys"]}
+        except Exception as exc:  # noqa: BLE001 - the dashboard is informational
+            out["error"] = f"{type(exc).__name__}: {exc}"
+    return out
 
 
 # --- teacher -------------------------------------------------------------------------------------

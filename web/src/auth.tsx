@@ -1,8 +1,8 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { LogIn } from "lucide-react";
-import { get, post } from "./api";
+import { get, post, resetSession } from "./api";
 import { Empty, Notice } from "./ui";
 
 export type User = {
@@ -11,25 +11,49 @@ export type User = {
   session: { id: string; kex: string; policy: string; expires_in: number } | null;
 };
 
-type Auth = { user: User | null; loading: boolean; login: (u: string, p: string) => Promise<void>; logout: () => Promise<void>; refresh: () => void };
-const Ctx = createContext<Auth>({ user: null, loading: true, login: async () => {}, logout: async () => {}, refresh: () => {} });
+type Auth = {
+  user: User | null; loading: boolean; signingOut: boolean;
+  login: (u: string, p: string) => Promise<void>; logout: () => Promise<void>; refresh: () => void;
+};
+const Ctx = createContext<Auth>({
+  user: null, loading: true, signingOut: false, login: async () => {}, logout: async () => {}, refresh: () => {},
+});
+
+const ME = ["me"] as const;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["me"], queryFn: () => get<{ user: User | null }>("/api/me"), refetchInterval: 15000 });
+  const [signingOut, setSigningOut] = useState(false);
+  const q = useQuery({ queryKey: ME, queryFn: () => get<{ user: User | null }>("/api/me"), refetchInterval: 15000 });
+
+  /** Drop every cached answer that belonged to the previous user, but keep the "me" query alive. */
+  const forgetOthers = useCallback(() => {
+    qc.cancelQueries({ predicate: (x) => x.queryKey[0] !== "me" });
+    qc.removeQueries({ predicate: (x) => x.queryKey[0] !== "me" });
+  }, [qc]);
+
+  const login = useCallback(async (u: string, p: string) => {
+    const me = await post<User>("/api/login", { username: u, password: p });
+    forgetOthers();
+    qc.setQueryData(ME, { user: me });
+  }, [qc, forgetOthers]);
+
+  const logout = useCallback(async () => {
+    setSigningOut(true);
+    try {
+      await post("/api/logout");          // server closes the device client and forgets the keys
+    } catch {
+      /* offline or already expired: still sign out locally */
+    } finally {
+      resetSession();                     // this tab becomes a fresh, anonymous device
+      forgetOthers();
+      qc.setQueryData(ME, { user: null });
+      setSigningOut(false);
+    }
+  }, [qc, forgetOthers]);
+
   const value: Auth = {
-    user: q.data?.user ?? null,
-    loading: q.isLoading,
-    login: async (u, p) => {
-      const me = await post<User>("/api/login", { username: u, password: p });
-      qc.setQueryData(["me"], { user: me });
-    },
-    logout: async () => {
-      await post("/api/logout");
-      qc.clear();
-      qc.setQueryData(["me"], { user: null });
-    },
-    refresh: () => q.refetch(),
+    user: q.data?.user ?? null, loading: q.isLoading, signingOut, login, logout, refresh: () => { q.refetch(); },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

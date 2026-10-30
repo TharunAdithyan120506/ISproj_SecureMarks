@@ -15,6 +15,15 @@ function sessionId(): string {
   return sid;
 }
 
+/** A new device identity for this tab (after sign-out, so nothing of the old session can be reused). */
+export function resetSession(): void {
+  try {
+    sessionStorage.setItem("sm-session", crypto.randomUUID().replace(/-/g, ""));
+  } catch {
+    (window as unknown as { __smSid?: string }).__smSid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);

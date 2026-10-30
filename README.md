@@ -110,7 +110,7 @@ py -3 -m venv .venv
 pip install -r requirements.txt
 cd web; npm ci; npm run build; cd ..
 python scripts\setup_demo.py --reset  # keys, users, database
-python -m pytest -q                   # 92 passed
+python -m pytest -q                   # 93 passed
 python scripts\run_demo.py --tap      # middleware, tap and portal, then opens the browser
 ```
 
@@ -150,7 +150,7 @@ python -m cryptolab.report        # ~10 s → cryptolab/out/*.json|csv|png and d
 | Results | **Analysis report** | Requirement coverage, headline numbers, every graph |
 | | **Benchmarks** | Security-goal matrix with measured costs, and end-to-end latency |
 
-The interface follows the system light or dark appearance, meets WCAG AA contrast, and respects
+The sidebar fits the window without scrolling, folds by section, and collapses to an icon rail (button or Ctrl+\\ / ⌘\\). The account menu at its foot holds Auto, Light and Dark appearance (dark is true black) and sign-out. The interface meets WCAG AA contrast, and respects
 reduced-motion and reduced-transparency settings. Status is never shown by colour alone.
 
 ![Analysis report, dark appearance](docs/screenshots/report_dark.png)
@@ -312,7 +312,7 @@ Where a feature corresponds to an exercise in the Information Security Lab manua
 ## 10. Tests
 
 ```powershell
-python -m pytest -q        # 92 tests: crypto, guards, end-to-end flow, answer sheets, analysis metrics, portal API
+python -m pytest -q        # 93 tests: crypto, guards, end-to-end flow, answer sheets, analysis metrics, portal API
 cd web; npm test           # UI component tests
 cd web; npm run typecheck  # TypeScript strict
 ```
@@ -363,7 +363,7 @@ SecureMarks/
 ├── bench/             efficiency benchmark
 ├── scripts/           setup_demo, run_demo, make_cert, backup_demo
 ├── config/            policies, devices, demo accounts
-├── tests/             92 pytest tests
+├── tests/             93 pytest tests
 └── docs/figures/      generated graphs used in this README
 ```
 
